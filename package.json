@@ -1,0 +1,10 @@
+{
+  "name": "anime-hindi-api",
+  "version": "1.0.0",
+  "description": "Serverless Hindi Anime Stream Scraper",
+  "main": "api/stream.js",
+  "dependencies": {
+    "axios": "^1.6.8",
+    "cheerio": "^1.0.0-rc.12"
+  }
+}
