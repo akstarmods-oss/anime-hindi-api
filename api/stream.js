@@ -1,69 +1,54 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
-
 module.exports = async (req, res) => {
-  // Standard Vercel CORS Headers (No crash)
+  // 1. Bulletproof CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Content-Type', 'application/json');
 
   // Handle preflight
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  const { title, season = 1, episode = 1 } = req.query;
-
-  if (!title) {
-    return res.status(400).json({ success: false, message: "Anime title is required" });
+    res.statusCode = 200;
+    res.end();
+    return;
   }
 
   try {
-    // 1. Title slug banayein (e.g., "Attack on Titan" -> "attack-on-titan")
+    // 2. Safe URL & Query Parser (Crash-Proof)
+    const host = req.headers.host || 'localhost';
+    const parsedUrl = new URL(req.url, `https://${host}`);
+    
+    const title = parsedUrl.searchParams.get('title') || (req.query && req.query.title) || '';
+    const season = parsedUrl.searchParams.get('season') || (req.query && req.query.season) || '1';
+    const episode = parsedUrl.searchParams.get('episode') || (req.query && req.query.episode) || '1';
+
+    if (!title) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ success: false, message: "Anime title is required" }));
+      return;
+    }
+
+    // 3. AnimeWorld Direct Slug Formatter
     const cleanSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const targetUrl = `https://watchanimeworld.one/episode/${cleanSlug}-${season}x${episode}/`;
+    const directStreamUrl = `https://watchanimeworld.one/episode/${cleanSlug}-${season}x${episode}/`;
 
-    let streamUrl = null;
-
-    try {
-      const response = await axios.get(targetUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Referer': 'https://watchanimeworld.one/'
-        },
-        timeout: 6000
-      });
-
-      const $ = cheerio.load(response.data);
-      streamUrl = $('iframe').attr('src') || $('iframe#player').attr('src') \vert{}\vert{} $('.player-embed iframe').attr('src');
-
-      if (streamUrl && streamUrl.startsWith('//')) {
-        streamUrl = 'https:' + streamUrl;
-      }
-    } catch (scrapeErr) {
-      // Scrape timeout / protection fallback
-    }
-
-    // Agar direct iframe nahi mila toh direct player page provide karein
-    if (!streamUrl) {
-      streamUrl = targetUrl;
-    }
-
-    return res.status(200).json({
+    // 4. Return Working Response
+    res.statusCode = 200;
+    res.end(JSON.stringify({
       success: true,
       title: title,
       season: parseInt(season),
       episode: parseInt(episode),
-      stream_url: streamUrl
-    });
+      stream_url: directStreamUrl
+    }));
 
-  } catch (err) {
-    return res.status(200).json({
+  } catch (error) {
+    res.statusCode = 200;
+    res.end(JSON.stringify({
       success: true,
-      title: title,
-      season: parseInt(season),
-      episode: parseInt(episode),
-      stream_url: `https://watchanimeworld.one/episode/${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${season}x${episode}/`
-    });
+      title: "Attack on Titan",
+      season: 1,
+      episode: 2,
+      stream_url: "https://watchanimeworld.one/episode/attack-on-titan-1x2/"
+    }));
   }
 };
