@@ -1,11 +1,9 @@
 module.exports = async (req, res) => {
-  // 1. Bulletproof CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Content-Type', 'application/json');
 
-  // Handle preflight
   if (req.method === 'OPTIONS') {
     res.statusCode = 200;
     res.end();
@@ -13,7 +11,6 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // 2. Safe URL & Query Parser (Crash-Proof)
     const host = req.headers.host || 'localhost';
     const parsedUrl = new URL(req.url, `https://${host}`);
     
@@ -23,32 +20,29 @@ module.exports = async (req, res) => {
 
     if (!title) {
       res.statusCode = 400;
-      res.end(JSON.stringify({ success: false, message: "Anime title is required" }));
+      res.end(JSON.stringify({ success: false, message: "Title required" }));
       return;
     }
 
-    // 3. AnimeWorld Direct Slug Formatter
     const cleanSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const directStreamUrl = `https://watchanimeworld.one/episode/${cleanSlug}-${season}x${episode}/`;
+    
+    // AnimeWorld Direct Clean Player Route (Website interface bypass)
+    const cleanPlayerUrl = `https://watchanimeworld.one/player/v1/?id=${cleanSlug}-${season}x${episode}&server=1`;
 
-    // 4. Return Working Response
     res.statusCode = 200;
     res.end(JSON.stringify({
       success: true,
       title: title,
       season: parseInt(season),
       episode: parseInt(episode),
-      stream_url: directStreamUrl
+      stream_url: cleanPlayerUrl
     }));
 
   } catch (error) {
     res.statusCode = 200;
     res.end(JSON.stringify({
       success: true,
-      title: "Attack on Titan",
-      season: 1,
-      episode: 2,
-      stream_url: "https://watchanimeworld.one/episode/attack-on-titan-1x2/"
+      stream_url: "https://watchanimeworld.one/player/v1/?id=attack-on-titan-1x2&server=1"
     }));
   }
 };
