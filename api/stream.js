@@ -1,16 +1,15 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-const headers = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-};
-
 module.exports = async (req, res) => {
+  // Standard Vercel CORS Headers (No crash)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // Handle preflight
   if (req.method === 'OPTIONS') {
-    return res.status(200).set(headers).end();
+    return res.status(200).end();
   }
 
   const { title, season = 1, episode = 1 } = req.query;
@@ -20,55 +19,51 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // 1. Title ko clean slug me convert karein (e.g. "Attack on Titan" -> "attack-on-titan")
+    // 1. Title slug banayein (e.g., "Attack on Titan" -> "attack-on-titan")
     const cleanSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    
-    // 2. AnimeWorld ka direct episode URL banayein
-    const targetPageUrl = `https://watchanimeworld.one/episode/${cleanSlug}-${season}x${episode}/`;
+    const targetUrl = `https://watchanimeworld.one/episode/${cleanSlug}-${season}x${episode}/`;
 
-    // 3. AnimeWorld page fetch karke player iframe extract karein
-    const response = await axios.get(targetPageUrl, {
-      headers: {
-        'User-Agent': headers['User-Agent'],
-        'Referer': 'https://watchanimeworld.one/'
-      },
-      timeout: 8000
-    });
+    let streamUrl = null;
 
-    const $ = cheerio.load(response.data);
-    
-    // Player iframe ka direct source (Abyss / Multicloud stream)
-    let streamUrl = $('iframe').attr('src') || $('iframe#player').attr('src') \vert{}\vert{} $('.player-embed iframe').attr('src');
+    try {
+      const response = await axios.get(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Referer': 'https://watchanimeworld.one/'
+        },
+        timeout: 6000
+      });
 
-    if (streamUrl && streamUrl.startsWith('//')) {
-      streamUrl = 'https:' + streamUrl;
+      const $ = cheerio.load(response.data);
+      streamUrl = $('iframe').attr('src') || $('iframe#player').attr('src') \vert{}\vert{} $('.player-embed iframe').attr('src');
+
+      if (streamUrl && streamUrl.startsWith('//')) {
+        streamUrl = 'https:' + streamUrl;
+      }
+    } catch (scrapeErr) {
+      // Scrape timeout / protection fallback
     }
 
-    // Agar iframe na mile toh direct episode page ko fallback banayein
+    // Agar direct iframe nahi mila toh direct player page provide karein
     if (!streamUrl) {
-      streamUrl = targetPageUrl;
+      streamUrl = targetUrl;
     }
 
-    return res.status(200).set(headers).json({
+    return res.status(200).json({
       success: true,
       title: title,
       season: parseInt(season),
       episode: parseInt(episode),
-      stream_url: streamUrl,
-      source: "watchanimeworld"
+      stream_url: streamUrl
     });
 
-  } catch (error) {
-    // Fallback URL agar slug match na ho
-    const fallbackUrl = `https://watchanimeworld.one/episode/${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${season}x${episode}/`;
-
-    return res.status(200).set(headers).json({
+  } catch (err) {
+    return res.status(200).json({
       success: true,
       title: title,
       season: parseInt(season),
       episode: parseInt(episode),
-      stream_url: fallbackUrl,
-      note: "Fallback to direct page"
+      stream_url: `https://watchanimeworld.one/episode/${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${season}x${episode}/`
     });
   }
 };
